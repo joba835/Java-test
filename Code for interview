@@ -1,0 +1,272 @@
+/**
+ * The {@code MinesweeperGUI} class provides a graphical user interface for the Minesweeper game.
+ * <p>
+ * This class handles the game's UI elements, including the game grid, control buttons, and status messages.
+ * It also facilitates user interactions, such as flagging cells, making guesses, saving/loading the game, 
+ * and undoing moves. The class uses the {@code JFrame} and {@code JPanel} from the Swing framework to create 
+ * the interface and implements {@code ActionListener} to respond to user actions.
+ * </p>
+ * 
+ * <p> 
+ * Made by Jack Winkle - W23053288.
+ * </p>
+ * 
+ * @author Jack Winkle
+ * @version 1.0
+ */
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.util.Stack;
+import java.io.ObjectOutputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.FileInputStream;
+import java.util.Observer; 
+import java.util.Observable;
+
+public class MinesweeperGUI extends JFrame implements ActionListener, Observer {
+    private Minesweeper theGame; // Minesweeper game logic
+    private JButton[][] buttons; // 2D buttons for the game grid
+    private JPanel boardPanel; // Panel to hold said buttons.
+    private JLabel statusLabel; // Displays status message to the user
+    private Stack<GameState> moveHistory; // Keeps track of game state for the undo function.
+    /**
+     * Constructs a {@code MinesweeperGUI} object and initializes the game interface.
+     * <p>
+     * The constructor sets up the game grid, control panel, and various UI components.
+     * It also initializes the game state and move history stack.
+     * </p>
+     */
+    public MinesweeperGUI() {
+        theGame = new Minesweeper();
+        moveHistory = new Stack<>();
+        initComponents();
+        theGame.addObserver(this);
+    }
+    
+    @Override
+    public void update(Observable o, Object arg) {
+       updateBoard();
+       statusLabel.setText("Game updated.");
+    }
+    
+    /**
+     * Initializes the components of the Minesweeper user interface.
+     * <p>
+     * This method sets up the layout of the main frame, including the game grid,
+     * control buttons, and status label. It also sets up the action listeners for each button.
+     * </p>
+     */
+    private void initComponents() {
+        setTitle("Minesweeper");
+        setSize(600, 600);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+
+        boardPanel = new JPanel(); 
+        boardPanel.setLayout(new GridLayout(theGame.getGameSize(), theGame.getGameSize()));
+        buttons = new JButton[theGame.getGameSize()][theGame.getGameSize()];
+        // The below should create buttons for the game grid.
+        for (int i = 0; i < theGame.getGameSize(); i++) {
+            for (int j = 0; j < theGame.getGameSize(); j++) {
+                buttons[i][j] = new JButton("?");
+                buttons[i][j].addActionListener(this);
+                boardPanel.add(buttons[i][j]);
+            }
+        }
+
+        add(boardPanel, BorderLayout.CENTER);
+        // The below are various buttons for the control panel. 
+        JPanel controlPanel = new JPanel();
+        controlPanel.setLayout(new GridLayout(1, 6));
+
+        JButton flagButton = new JButton("Flag");
+        flagButton.addActionListener(e -> flagCell());
+        controlPanel.add(flagButton);
+
+        JButton guessButton = new JButton("Guess");
+        guessButton.addActionListener(e -> guessCell());
+        controlPanel.add(guessButton);
+
+        JButton saveButton = new JButton("Save");
+        saveButton.addActionListener(e -> saveGame());
+        controlPanel.add(saveButton);
+
+        JButton loadButton = new JButton("Load");
+        loadButton.addActionListener(e -> loadGame());
+        controlPanel.add(loadButton);
+
+        JButton clearButton = new JButton("Clear");
+        clearButton.addActionListener(e -> clearGame());
+        controlPanel.add(clearButton);
+
+        JButton undoButton = new JButton("Undo");
+        undoButton.addActionListener(e -> undoMove());
+        controlPanel.add(undoButton);
+
+        add(controlPanel, BorderLayout.SOUTH);
+        // This status label displays game messages.
+        statusLabel = new JLabel("Welcome to Minesweeper!", SwingConstants.CENTER);
+        add(statusLabel, BorderLayout.NORTH);
+    }
+    /**
+     * Handles button clicks on the game grid.
+     * <p>
+     * When a button is clicked, the corresponding cell's row and column are identified,
+     * and the move is processed based on the user's input (flag or guess).
+     * </p>
+     *
+     * @param e the action event triggered by a button click
+     */
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        JButton clickedButton = (JButton) e.getSource();
+        for (int i = 0; i < theGame.getGameSize(); i++) {
+            for (int j = 0; j < theGame.getGameSize(); j++) {
+                if (buttons[i][j] == clickedButton) {
+                    handleCellClick(i, j);
+                    return;
+                }
+            }
+        }
+    }
+    /**
+     * Handles the cell click by asking the user whether to flag or guess the cell.
+     * <p>
+     * The game state is saved before the move is processed.
+     * </p>
+     *
+     * @param row the row of the clicked cell
+     * @param col the column of the clicked cell
+     */
+    private void handleCellClick(int row, int col) {
+        String choice = JOptionPane.showInputDialog(this, "Enter M to flag or G to guess:");
+        if (choice != null) {
+            saveGameState();
+            String result = theGame.makeMove(String.valueOf(row), String.valueOf(col), choice.toUpperCase());
+            updateBoard();
+            checkGameStatus();
+            statusLabel.setText(result);
+        }
+    }
+    /**
+     * Flags a cell based on user input for the row and column.
+     */
+    private void flagCell() {
+        String row = JOptionPane.showInputDialog(this, "Enter the row to flag:");
+        String col = JOptionPane.showInputDialog(this, "Enter the column to flag:");
+        if (row != null && col != null) {
+            saveGameState();
+            String result = theGame.makeMove(row, col, "M");
+            updateBoard();
+            checkGameStatus();
+            statusLabel.setText(result);
+        }
+    }
+    // The below provide functionality of the game in the GUI.
+    private void guessCell() {
+        String row = JOptionPane.showInputDialog(this, "Enter the row to guess:");
+        String col = JOptionPane.showInputDialog(this, "Enter the column to guess:");
+        if (row != null && col != null) {
+            saveGameState(); // This should save the game as it is, cjheck after loading it too!!!
+            String result = theGame.makeMove(row, col, "G");
+            updateBoard();
+            checkGameStatus();
+            statusLabel.setText(result);
+        }
+    }
+
+    private void updateBoard() {
+        for (int i = 0; i < theGame.getGameSize(); i++) {
+            for (int j = 0; j < theGame.getGameSize(); j++) {
+                buttons[i][j].setText(theGame.getCellState(i, j));
+            }
+        }
+    }
+
+    private void checkGameStatus() {
+        String status = theGame.checkWin();
+        if (status.equals("won")) {
+            JOptionPane.showMessageDialog(this, "Congratulations, you solved the level!");
+            clearGame();
+        } else if (status.equals("lives")) {
+            JOptionPane.showMessageDialog(this, "You have run out of lives, the game is over.");
+            clearGame();
+        }
+    }
+
+    private void saveGameState() {
+        Slot[][] currentMoves = new Slot[theGame.getGameSize()][theGame.getGameSize()];
+        for (int i = 0; i < theGame.getGameSize(); i++) {
+            for (int j = 0; j < theGame.getGameSize(); j++) {
+                currentMoves[i][j] = new Slot(i, j, theGame.getCellState(i, j));
+            }
+        }
+        moveHistory.push(new GameState(currentMoves, theGame.getLives()));
+    }
+
+    private void undoMove() {
+        if (!moveHistory.isEmpty()) {
+            GameState previousState = moveHistory.pop();
+            theGame.setGameState(previousState);
+            updateBoard();
+            statusLabel.setText("Move undone.");
+        } else {
+            JOptionPane.showMessageDialog(this, "No moves to undo.");
+        }
+    }
+
+    private void saveGame() {
+        String userHome = System.getProperty("user.home");
+        String defaultFilePath = userHome + "/myFile.txt";
+
+        try {
+            FileOutputStream fileStream = new FileOutputStream(defaultFilePath);
+            ObjectOutputStream oot = new ObjectOutputStream(fileStream);
+            oot.writeObject(theGame); 
+            oot.close();
+            fileStream.close();
+            System.out.println("Your game has been saved to " + defaultFilePath);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        JOptionPane.showMessageDialog(this, "Game has been saved!");
+    }
+
+    private void loadGame() {
+        String userHome = System.getProperty("user.home");
+        String defaultFilePath = userHome + "/myFile.txt";
+
+        try {
+            FileInputStream fileStream = new FileInputStream(defaultFilePath);
+            ObjectInputStream oit = new ObjectInputStream(fileStream);
+            Minesweeper loadedGame = (Minesweeper) oit.readObject();
+            oit.close();
+            fileStream.close();
+            
+            this.theGame = loadedGame;
+            updateBoard();
+            System.out.println("Your game from " + defaultFilePath + " has been loaded!");
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        JOptionPane.showMessageDialog(this, "Game has been loaded!");
+    }
+
+    public void clearGame(){
+        moveHistory.clear();
+        theGame.resetGame(); 
+        updateBoard(); 
+        statusLabel.setText("Game has been cleared. New game started!");
+    }
+    /**
+     * The main method to run the Minesweeper game interface.
+     *
+     * @param args command line arguments (not used)
+     */
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new MinesweeperGUI().setVisible(true));
+    }
+} 
